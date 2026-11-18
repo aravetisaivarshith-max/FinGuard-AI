@@ -1,0 +1,8 @@
+{
+  "name": "FinGuard AI",
+  "description": "AI-based personal finance management, transaction risk monitoring, PaySim fraud assessment demo, and scam-awareness assistant with strict multi-user isolation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

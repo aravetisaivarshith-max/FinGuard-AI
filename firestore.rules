@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Primitives ---
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function userExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'lastLoginAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'lastLoginAt'])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.photoURL is string && data.photoURL.size() <= 500
+        && data.createdAt is timestamp
+        && data.lastLoginAt is timestamp;
+    }
+
+    function isValidTransaction(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'transactionDate', 'description', 'amount',
+          'transactionType', 'category', 'paymentMethod', 'notes',
+          'reviewedDuplicate', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'transactionDate', 'description', 'amount',
+          'transactionType', 'category', 'paymentMethod', 'notes',
+          'reviewedDuplicate', 'createdAt', 'updatedAt'
+        ])
+        && data.userId is string && data.userId == userId
+        && data.transactionDate is string && data.transactionDate.size() == 10 && data.transactionDate.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.description is string && data.description.size() >= 1 && data.description.size() <= 200
+        && data.amount is number && data.amount > 0 && data.amount <= 1000000000
+        && data.transactionType in ['Income', 'Expense']
+        && data.category in [
+          'Uncategorized', 'Food', 'Bills', 'Education', 'Entertainment',
+          'Healthcare', 'Shopping', 'Transportation', 'Investment', 'Other'
+        ]
+        && data.paymentMethod in ['UPI', 'Cash', 'Card', 'Bank transfer', 'Other']
+        && data.notes is string && data.notes.size() <= 400
+        && data.reviewedDuplicate is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFraudAssessment(data, userId) {
+      return data.keys().hasAll([
+          'userId', 'step', 'transactionType', 'amount',
+          'oldbalanceOrg', 'newbalanceOrig', 'oldbalanceDest', 'newbalanceDest',
+          'logisticScore', 'randomForestScore', 'fraudThreshold', 'fraudFlagged',
+          'isolationScore', 'anomalyThreshold', 'anomalyFlagged', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'step', 'transactionType', 'amount',
+          'oldbalanceOrg', 'newbalanceOrig', 'oldbalanceDest', 'newbalanceDest',
+          'logisticScore', 'randomForestScore', 'fraudThreshold', 'fraudFlagged',
+          'isolationScore', 'anomalyThreshold', 'anomalyFlagged', 'createdAt'
+        ])
+        && data.userId is string && data.userId == userId
+        && data.step is number && data.step >= 1 && data.step <= 744
+        && data.transactionType in ['TRANSFER', 'CASH_OUT', 'PAYMENT', 'CASH_IN', 'DEBIT']
+        && data.amount is number && data.amount > 0 && data.amount <= 1000000000
+        && data.oldbalanceOrg is number && data.oldbalanceOrg >= 0
+        && data.newbalanceOrig is number && data.newbalanceOrig >= 0
+        && data.oldbalanceDest is number && data.oldbalanceDest >= 0
+        && data.newbalanceDest is number && data.newbalanceDest >= 0
+        && data.logisticScore is number && data.logisticScore >= 0 && data.logisticScore <= 1
+        && data.randomForestScore is number && data.randomForestScore >= 0 && data.randomForestScore <= 1
+        && data.fraudThreshold is number && data.fraudThreshold >= 0 && data.fraudThreshold <= 1
+        && data.fraudFlagged is bool
+        && data.isolationScore is number && data.isolationScore >= -1 && data.isolationScore <= 1
+        && data.anomalyThreshold is number && data.anomalyThreshold >= -1 && data.anomalyThreshold <= 1
+        && data.anomalyFlagged is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPreferences(data, userId) {
+      return data.keys().hasAll(['userId', 'dailyFrequencyThreshold', 'unusualSpendMultiplier', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'dailyFrequencyThreshold', 'unusualSpendMultiplier', 'updatedAt'])
+        && data.userId is string && data.userId == userId
+        && data.dailyFrequencyThreshold is number && data.dailyFrequencyThreshold >= 1 && data.dailyFrequencyThreshold <= 100
+        && data.unusualSpendMultiplier is number && data.unusualSpendMultiplier >= 1.2 && data.unusualSpendMultiplier <= 10
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId) && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().lastLoginAt == request.time;
+      allow update: if isValidId(userId) && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().lastLoginAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'photoURL', 'lastLoginAt']);
+      allow delete: if isValidId(userId) && isOwner(userId);
+
+      match /transactions/{transactionId} {
+        allow get: if isValidId(userId) && isValidId(transactionId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(transactionId) && isOwner(userId)
+          && userExists(userId)
+          && isValidTransaction(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && isValidId(transactionId) && isOwner(userId)
+          && isValidTransaction(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'transactionDate', 'description', 'amount', 'transactionType',
+              'category', 'paymentMethod', 'notes', 'reviewedDuplicate', 'updatedAt'
+            ])
+            || incoming().diff(existing()).affectedKeys().hasOnly(['reviewedDuplicate', 'updatedAt'])
+          );
+        allow delete: if isValidId(userId) && isValidId(transactionId) && isOwner(userId);
+      }
+
+      match /fraudAssessments/{assessmentId} {
+        allow get: if isValidId(userId) && isValidId(assessmentId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(assessmentId) && isOwner(userId)
+          && userExists(userId)
+          && isValidFraudAssessment(incoming(), userId)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(assessmentId) && isOwner(userId);
+      }
+
+      match /preferences/{prefId} {
+        allow get: if isValidId(userId) && prefId == 'config' && isOwner(userId);
+        allow list: if false;
+        allow create: if isValidId(userId) && prefId == 'config' && isOwner(userId)
+          && userExists(userId)
+          && isValidPreferences(incoming(), userId)
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && prefId == 'config' && isOwner(userId)
+          && isValidPreferences(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'dailyFrequencyThreshold', 'unusualSpendMultiplier', 'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && prefId == 'config' && isOwner(userId);
+      }
+    }
+  }
+}

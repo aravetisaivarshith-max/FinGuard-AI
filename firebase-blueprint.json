@@ -1,0 +1,238 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user identity anchored to Firebase Auth UID with private PII restricted to the owner.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "displayName", "email", "photoURL", "createdAt", "lastLoginAt"]
+    },
+    "TransactionRecord": {
+      "title": "TransactionRecord",
+      "description": "User-owned personal income or expense record in INR.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "transactionDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "amount": {
+          "type": "number"
+        },
+        "transactionType": {
+          "type": "string",
+          "enum": ["Income", "Expense"]
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Uncategorized",
+            "Food",
+            "Bills",
+            "Education",
+            "Entertainment",
+            "Healthcare",
+            "Shopping",
+            "Transportation",
+            "Investment",
+            "Other"
+          ]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["UPI", "Cash", "Card", "Bank transfer", "Other"]
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "reviewedDuplicate": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "transactionDate",
+        "description",
+        "amount",
+        "transactionType",
+        "category",
+        "paymentMethod",
+        "notes",
+        "reviewedDuplicate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FraudAssessment": {
+      "title": "FraudAssessment",
+      "description": "PaySim schema fraud & anomaly demonstration assessment scoped strictly to the authenticated user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "step": {
+          "type": "number"
+        },
+        "transactionType": {
+          "type": "string",
+          "enum": ["TRANSFER", "CASH_OUT", "PAYMENT", "CASH_IN", "DEBIT"]
+        },
+        "amount": {
+          "type": "number"
+        },
+        "oldbalanceOrg": {
+          "type": "number"
+        },
+        "newbalanceOrig": {
+          "type": "number"
+        },
+        "oldbalanceDest": {
+          "type": "number"
+        },
+        "newbalanceDest": {
+          "type": "number"
+        },
+        "logisticScore": {
+          "type": "number"
+        },
+        "randomForestScore": {
+          "type": "number"
+        },
+        "fraudThreshold": {
+          "type": "number"
+        },
+        "fraudFlagged": {
+          "type": "boolean"
+        },
+        "isolationScore": {
+          "type": "number"
+        },
+        "anomalyThreshold": {
+          "type": "number"
+        },
+        "anomalyFlagged": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "step",
+        "transactionType",
+        "amount",
+        "oldbalanceOrg",
+        "newbalanceOrig",
+        "oldbalanceDest",
+        "newbalanceDest",
+        "logisticScore",
+        "randomForestScore",
+        "fraudThreshold",
+        "fraudFlagged",
+        "isolationScore",
+        "anomalyThreshold",
+        "anomalyFlagged",
+        "createdAt"
+      ]
+    },
+    "RiskPreferences": {
+      "title": "RiskPreferences",
+      "description": "User-configurable personal activity monitoring thresholds.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dailyFrequencyThreshold": {
+          "type": "number"
+        },
+        "unusualSpendMultiplier": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "dailyFrequencyThreshold", "unusualSpendMultiplier", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profile document anchored to Firebase Auth UID."
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/TransactionRecord" },
+      "description": "User-scoped personal financial transactions."
+    },
+    "/users/{userId}/fraudAssessments/{assessmentId}": {
+      "schema": { "$ref": "#/entities/FraudAssessment" },
+      "description": "User-scoped PaySim fraud model demonstration history."
+    },
+    "/users/{userId}/preferences/{prefId}": {
+      "schema": { "$ref": "#/entities/RiskPreferences" },
+      "description": "User-scoped risk monitor configuration."
+    }
+  }
+}
